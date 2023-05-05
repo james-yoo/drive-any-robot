@@ -14,8 +14,8 @@
 
 # ros2 datasets below:
 rclue:
-  odomtopics: "/odom"
-  imtopics: "/image_raw"
+  odomtopic: "/odom"
+  imgtopic: "/image_raw"
   ang_offset: 0.0
   img_process_func: "process_scand_img"
   odom_process_func: "nav_to_xy_yaw"

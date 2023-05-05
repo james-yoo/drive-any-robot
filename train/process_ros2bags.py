@@ -36,15 +36,37 @@ def main(args: argparse.Namespace):
 
     # processing loop
     for bag_dir in bag_dirs:
-      bag_img_data, bag_traj_data = get_images_and_odom(
-        bag_dir,
-        config[args.dataset_name]["imtopics"],
-        config[args.dataset_name]["odomtopics"],
-        eval(config[args.dataset_name]["img_process_func"]),
-        eval(config[args.dataset_name]["odom_process_func"]),
-        rate=args.sample_rate,
-        ang_offset=config[args.dataset_name]["ang_offset"],
-      )
+        bag_img_data, bag_traj_data = get_images_and_odom(
+            bag_dir,
+            config[args.dataset_name]["imgtopic"],
+            config[args.dataset_name]["odomtopic"],
+            eval(config[args.dataset_name]["img_process_func"]),
+            eval(config[args.dataset_name]["odom_process_func"]),
+            rate=args.sample_rate,
+            ang_offset=config[args.dataset_name]["ang_offset"],
+        )
+
+        if bag_img_data is None or bag_traj_data is None:
+            print(f"{bag_path} did not have the topics we were looking for. Skipping...")
+            continue
+
+        # remove backwards movement
+        cut_trajs = filter_backwards(bag_img_data, bag_traj_data)
+
+        for i, (img_data_i, traj_data_i) in enumerate(cut_trajs):
+            traj_name_i = traj_name + f"_{i}"
+            traj_folder_i = os.path.join(args.output_dir, traj_name_i)
+
+            # make a folder for the traj
+            if not os.path.exists(traj_folder_i):
+                os.makedirs(traj_folder_i)
+            with open(os.path.join(traj_folder_i, "traj_data.pkl"), "wb") as f:
+                pickle.dump(traj_data_i, f)
+
+            # save the image data to disk
+            for i, img in enumerate(img_data_i):
+                img.save(os.path.join(traj_folder_i, f"{i}.jpg"))
+
     # for bag_path in tqdm.tqdm(bag_files, desc="Bags processed"):
     #     try:
     #         b = rosbag.Bag(bag_path)
@@ -66,6 +88,7 @@ def main(args: argparse.Namespace):
     #         rate=args.sample_rate,
     #         ang_offset=config[args.dataset_name]["ang_offset"],
     #     )
+
     #     if bag_img_data is None or bag_traj_data is None:
     #         print(
     #             f"{bag_path} did not have the topics we were looking for. Skipping..."
@@ -109,9 +132,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output-dir",
         "-o",
-        default="../datasets/tartan_drive/",
+        default="../datasets/rclue/",
         type=str,
-        help="path for processed dataset (default: ../datasets/tartan_drive/)",
+        help="path for processed dataset (default: ../datasets/rclue/)",
     )
     # number of trajs to process
     parser.add_argument(

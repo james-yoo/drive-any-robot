@@ -10,21 +10,8 @@ import torchvision.transforms.functional as TF
 from pathlib import Path
 from rosbags.highlevel import AnyReader
 
-"""
-
-
-# create reader instance and open for reading
-with AnyReader([Path('/home/ros/rosbag_2020_03_24')]) as reader:
-    connections = [x for x in reader.connections if x.topic == '/imu_raw/Imu']
-    for connection, timestamp, rawdata in reader.messages(connections=connections):
-         msg = reader.deserialize(rawdata, connection.msgtype)
-         print(msg.header.frame_id)
-
-"""
-
 IMAGE_SIZE = (160, 120)
 IMAGE_ASPECT_RATIO = 4 / 3
-
 
 def process_images(im_list: list, img_process_func) -> list:
     """
@@ -189,7 +176,7 @@ def nav_to_xy_yaw(odom_msg, ang_offset: float) -> tuple[list[float], float]:
 
 def get_images_and_odom(
     dir: str,
-    imtopic: str,
+    imgtopic: str,
     odomtopic: str,
     img_process_func: Any,
     odom_process_func: Any,
@@ -201,7 +188,7 @@ def get_images_and_odom(
 
     Args:
         dir : rosbag2 directory
-        imtopic : topic name for image data
+        imgtopic : topic name for image data
         odomtopic : topic name for odom data
         img_process_func (Any): function to process image data
         odom_process_func (Any): function to process odom data
@@ -228,32 +215,45 @@ def get_images_and_odom(
     #         if bag.get_message_count(ot) > 0:
     #             odomtopic = ot
     #             break
-    if not (imtopic and odomtopic):
+    if not (imgtopic and odomtopic):
         # bag doesn't have both topics
+        print('No topics found.. shutdown')
         return None, None
 
     # read ros2bag
-    img_raw_data = []
-    odom_data = []
+    synced_img_data = []
+    synced_odom_data = []
+    times = []
+    curr_img_data = None
+    curr_odom_data = None
     with AnyReader([Path(dir)]) as reader:
-        img_connections = [x for x in reader.connections if x.topic == imtopic]
-        odom_connections = [x for x in reader.connections if x.topic == odomtopic]
-        #print(img_connections)
-        #print(odom_connections)
-        for connection, timestamp, rawdata in reader.messages(connections=img_connections):
-            msg = reader.deserialize(rawdata, connection.msgtype)
-            img_raw_data.append(msg)
-        for connection, timestamp, rawdata in reader.messages(connections=odom_connections):
-            msg = reader.deserialize(rawdata, connection.msgtype)
-            odom_data.append(msg)
+        currtime = reader.start_time
+        starttime = currtime
 
-    for i in range(0, len(img_raw_data)):
-        print(img_raw_data[i])
-    for i in range(0, len(odom_data)):
-        print(odom_data[i])
+        connections = [x for x in reader.connections if (x.topic == imgtopic and x.topic == odomtopic) ]
 
-    img_data = []
-    traj_data = []
+        for connection, timestamp, rawdata in reader.messages(connections=connections):
+            msg = reader.deserialize(rawdata, connection.msgtype)
+            if connection.topic == imgtopic:
+                curr_img_data = msg
+            elif connection.topic == odomtopic:
+                curr_odom_data = msg
+
+            if (timestamp - currtime) >= 1.0 / rate:
+                if curr_img_data is not None and curr_odom_data is not None:
+                    synced_img_data.append(curr_img_data)
+                    synced_odom_data.append(curr_odom_data)
+                currtime = timestamp
+                times.append(currtime - starttime)
+
+    print(synced_img_data[0])
+    img_data = process_images(synced_img_data, img_process_func)
+    traj_data = process_odom(
+        synced_odom_data,
+        odom_process_func,
+        ang_offset=ang_offset,
+    )
+
     # synced_imdata = []
     # synced_odomdata = []
     # # get start time of bag in seconds

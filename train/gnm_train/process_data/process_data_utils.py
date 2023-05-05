@@ -172,7 +172,6 @@ def get_images_and_odom(
 
     return img_data, traj_data
 
-
 def is_backwards(
     pos1: np.ndarray, yaw1: float, pos2: np.ndarray, eps: float = 1e-5
 ) -> bool:
